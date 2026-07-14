@@ -1,0 +1,52 @@
+---
+# Helm values for the initial ArgoCD install (chart: argo/argo-cd).
+# After bootstrap, ArgoCD manages itself using these same values via the
+# `argocd-self` Application — so any change here should go through a PR.
+
+global:
+  # Match the chart's default; pinned here so upgrades are explicit.
+  domain: argocd.local
+
+configs:
+  params:
+    # Terminate TLS at ingress (or use port-forward locally).
+    server.insecure: true
+
+  cm:
+    # Sensible defaults for a small cluster.
+    timeout.reconciliation: 180s
+    application.instanceLabelKey: argocd.argoproj.io/instance
+
+  # Enable the built-in exec into pods from the UI (handy for demos, off in prod).
+  # exec.enabled: "false"
+
+server:
+  # Small footprint for kind / small EKS.
+  replicas: 1
+
+  service:
+    type: ClusterIP
+
+  metrics:
+    enabled: true
+
+controller:
+  replicas: 1
+  metrics:
+    enabled: true
+
+repoServer:
+  replicas: 1
+  metrics:
+    enabled: true
+
+applicationSet:
+  enabled: true
+  replicas: 1
+
+notifications:
+  enabled: false
+
+dex:
+  # No SSO for the portfolio setup; local admin only.
+  enabled: false

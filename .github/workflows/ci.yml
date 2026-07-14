@@ -61,4 +61,4 @@ jobs:
               document-start: disable
               truthy:
                 check-keys: false
-          file_or_dir: kind/
+          file_or_dir: kind/ platform/

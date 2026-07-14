@@ -1,0 +1,36 @@
+---
+# app-of-apps root. This is the ONLY manifest you `kubectl apply` by hand
+# after installing ArgoCD. Everything else — including ArgoCD's own
+# upgrades — flows from here.
+#
+# Add a new managed component by dropping a new Application manifest into
+# platform/argocd/applications/ and pushing. This root will discover it and
+# ArgoCD will start managing it.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+
+  source:
+    repoURL: https://github.com/dgh09/eks-gitops-platform.git
+    targetRevision: main
+    path: platform/argocd/applications
+    directory:
+      recurse: true
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

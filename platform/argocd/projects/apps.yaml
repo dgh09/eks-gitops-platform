@@ -1,0 +1,33 @@
+---
+# AppProject for application workloads (podinfo, sidebyside, ...).
+# Deliberately narrower than the platform project: apps live only in their
+# own namespaces and can't touch cluster-scoped resources.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: apps
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: Application workloads. Namespace-scoped, no cluster resources.
+
+  sourceRepos:
+    - https://github.com/dgh09/eks-gitops-platform.git
+    - https://stefanprodan.github.io/podinfo
+
+  destinations:
+    - namespace: podinfo
+      server: https://kubernetes.default.svc
+    - namespace: sidebyside
+      server: https://kubernetes.default.svc
+
+  # Apps must not create cluster-scoped resources.
+  clusterResourceWhitelist: []
+
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+
+  orphanedResources:
+    warn: true
