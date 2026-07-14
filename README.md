@@ -53,10 +53,17 @@ cluster-agnostic.
 Requirements: Docker, [kind](https://kind.sigs.k8s.io/), `kubectl`, `make`.
 
 ```bash
-make cluster-up      # spins up a 3-node kind cluster with ingress ports
-make cluster-status  # sanity check: nodes + system pods
-# (next PR) make bootstrap    # installs ArgoCD and points it at this repo
+make cluster-up          # spins up a 3-node kind cluster with ingress ports
+make cluster-status      # sanity check: nodes + system pods
+make bootstrap           # installs ArgoCD + applies the root app-of-apps
+make argocd-password     # initial admin password
+make argocd-ui           # port-forward to http://localhost:8080
 ```
+
+Once `make bootstrap` finishes, ArgoCD is running and self-managing —
+future changes to `platform/argocd/values.yaml` (or any other component)
+land via PR, not `helm upgrade`. See
+[`platform/argocd/README.md`](./platform/argocd/README.md) for details.
 
 Tear it down:
 
@@ -98,7 +105,7 @@ aws eks update-kubeconfig --name gitops-platform --region us-east-1
 ## 🗺️ Roadmap
 
 - [x] **PR 1** — Repo scaffolding, kind cluster, Terraform EKS (validate-only), docs
-- [ ] **PR 2** — ArgoCD bootstrap + app-of-apps pattern
+- [x] **PR 2** — ArgoCD bootstrap + app-of-apps pattern
 - [ ] **PR 3** — Platform components via GitOps (ingress-nginx, cert-manager)
 - [ ] **PR 4** — Demo apps (podinfo + sidebyside)
 - [ ] **PR 5** — Observability stack (Prometheus + Grafana + Loki)

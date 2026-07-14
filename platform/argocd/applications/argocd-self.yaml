@@ -1,0 +1,39 @@
+---
+# ArgoCD managing itself. Any change to platform/argocd/values.yaml (or the
+# chart version pinned below) enters via PR and is synced by ArgoCD without
+# a human running `helm upgrade`.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argocd
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+
+  sources:
+    - repoURL: https://argoproj.github.io/argo-helm
+      chart: argo-cd
+      targetRevision: 7.6.12
+      helm:
+        releaseName: argocd
+        valueFiles:
+          - $values/platform/argocd/values.yaml
+    - repoURL: https://github.com/dgh09/eks-gitops-platform.git
+      targetRevision: main
+      ref: values
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+
+  syncPolicy:
+    automated:
+      # Do NOT prune ArgoCD's own resources — a bad diff could wipe the
+      # controller mid-sync. Self-heal is fine.
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+      - ServerSideApply=true

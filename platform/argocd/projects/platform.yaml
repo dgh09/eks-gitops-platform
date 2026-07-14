@@ -1,0 +1,35 @@
+---
+# AppProject for cluster-wide platform components: ingress, cert-manager,
+# observability, etc. These need broad cluster permissions but should only
+# be sourced from this repo.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: Cluster-wide platform components managed by this repo.
+
+  sourceRepos:
+    - https://github.com/dgh09/eks-gitops-platform.git
+    # Public Helm chart repos we install platform components from.
+    - https://kubernetes.github.io/ingress-nginx
+    - https://charts.jetstack.io
+    - https://argoproj.github.io/argo-helm
+
+  destinations:
+    - namespace: "*"
+      server: https://kubernetes.default.svc
+
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
+
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+
+  orphanedResources:
+    warn: true
