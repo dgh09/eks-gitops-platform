@@ -17,6 +17,11 @@ configs:
     timeout.reconciliation: 180s
     application.instanceLabelKey: argocd.argoproj.io/instance
 
+    # Pinned, not inherited. ArgoCD 3.0 flipped this default from `label` to
+    # `annotation`; stating it here means a future default flip is a diff we
+    # review rather than a surprise we debug. See ADR-005.
+    application.resourceTrackingMethod: annotation
+
   # Enable the built-in exec into pods from the UI (handy for demos, off in prod).
   # exec.enabled: "false"
 

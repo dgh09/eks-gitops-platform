@@ -171,3 +171,74 @@ adding one "for symmetry" would be cargo cult.
 `values-eks.yaml` is **not** in this repo yet: writing it would mean shipping
 config no one has ever run, and the EKS path is still `terraform validate`
 only. It lands with the first real EKS apply.
+
+### ADR-005 — Upgrade ArgoCD to 3.x, and pin what the majors made implicit
+
+**Context:** The bootstrap pinned chart `7.6.12`, which ships ArgoCD `v2.12.6`
+— released late 2024 and tested against Kubernetes ~1.31. `kind` now
+provisions 1.36. Kubernetes 1.36 declares `deployment.status.terminatingReplicas`
+and populates it even at rest; the OpenAPI schema embedded in 2.12.6 has never
+heard of the field, so the structured-merge diff dies with
+`ComparisonError: .status.terminatingReplicas: field not declared in schema`.
+
+That error is not cosmetic. An Application whose diff cannot be computed cannot
+have its sync operation concluded, and the blast radius depends on what the
+component needs. `cert-manager` merely flaps to `Unknown` while its pods run
+happily. `ingress-nginx` — the only component here with a PreSync hook — gets
+stuck permanently: its `admission-create` Job runs, succeeds, is deleted by the
+chart's `hook-succeeded` delete policy, and then the operation hangs forever on
+`waiting for completion of hook batch/Job/ingress-nginx-admission-create`
+because the diff that would let ArgoCD call the operation done never completes.
+The component never deploys. Five Kubernetes minor versions of skew is not a
+version number problem; it is a broken cluster.
+
+**Decision:** Bump to chart `10.1.3` (ArgoCD `v3.4.5`), and write down the two
+defaults the intervening majors changed underneath us rather than inheriting
+them silently.
+
+**Rationale:** The upgrade crosses three chart majors and one ArgoCD major, so
+it was worth auditing rather than trusting. Rendering `10.1.3` against our
+existing `values.yaml` produces a clean template with every key still live and
+every setting still landing — the values needed no migration at all. What did
+change is behaviour, in three places, only one of which is interesting:
+
+| Change | Source | Verdict |
+|---|---|---|
+| Resource tracking `label` → `annotation` | ArgoCD 3.0 | Accepted, now pinned |
+| `global.networkPolicy.create` `false` → `true` | Chart 10.0.0 | Accepted |
+| `applicationsetcontroller.policy` `sync` → `""` | Chart 9.0.0 | Moot — ADR-003 |
+| Fine-grained RBAC stops inheriting to sub-resources | ArgoCD 3.0 | Moot — single local admin |
+| Logs RBAC always enforced | ArgoCD 3.0 | Moot — single local admin |
+
+On **tracking**, upstream's own guidance is to take the new default, and the
+alternative — pinning `label` to preserve v2 semantics — buys nothing but
+deferred work. The documented edge case (a resource deleted in the very first
+sync after the switch can be orphaned) is a real risk on a long-lived cluster
+and a non-risk here, where the cluster is disposable by construction (ADR-002)
+and `make cluster-down` is the escape hatch. But taking a default is not the
+same as leaving it unstated: `application.resourceTrackingMethod: annotation`
+is now written in `values.yaml`, because the whole reason this ADR exists is
+that a default changed under a pin we thought was total.
+
+On **NetworkPolicies**, the chart now ships four, and `kindnet` enforces them
+— so unlike on many local setups they are not decorative here. They were read
+before being accepted: all four are `Ingress`-only, so nothing constrains
+ArgoCD's egress to GitHub or the Helm repos; `argocd-server` accepts from
+anywhere, so `make argocd-ui` keeps working; and `repo-server` and `redis`
+admit exactly the ArgoCD components that call them. They match the topology
+this repo actually runs.
+
+**Consequences:** The chart version lives in two places that must not drift —
+`ARGOCD_CHART_V` in the `Makefile` (what a first bootstrap installs) and
+`targetRevision` in `applications/argocd-self.yaml` (what ArgoCD applies to
+itself). Bumping one alone means a fresh `make bootstrap` installs a different
+ArgoCD than the one Git converges to; both move together or neither does.
+
+Existing resources carry the old `argocd.argoproj.io/instance` label until
+their next sync rewrites it as a tracking annotation, so a one-time `OutOfSync`
+churn across previously-synced apps is expected and is not a failure.
+
+The upgrade is also its own best demonstration: bumping `targetRevision` and
+merging is a change ArgoCD picks up and applies **to itself**, with no
+`helm upgrade` and no human touching the cluster. The bootstrap Helm release
+installs ArgoCD exactly once; every version after that arrives through Git.
