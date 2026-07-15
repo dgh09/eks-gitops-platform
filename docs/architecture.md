@@ -234,11 +234,42 @@ this repo actually runs.
 itself). Bumping one alone means a fresh `make bootstrap` installs a different
 ArgoCD than the one Git converges to; both move together or neither does.
 
-Existing resources carry the old `argocd.argoproj.io/instance` label until
-their next sync rewrites it as a tracking annotation, so a one-time `OutOfSync`
-churn across previously-synced apps is expected and is not a failure.
-
 The upgrade is also its own best demonstration: bumping `targetRevision` and
 merging is a change ArgoCD picks up and applies **to itself**, with no
 `helm upgrade` and no human touching the cluster. The bootstrap Helm release
 installs ArgoCD exactly once; every version after that arrives through Git.
+Budget patience for it: the self-upgrade took **~10 minutes and two retries**
+to converge. Checking at minute six and concluding it failed is a mistake this
+repo has already made once.
+
+**Postscript — what the tracking switch actually did.** This ADR originally
+predicted that existing resources would carry the old
+`argocd.argoproj.io/instance` label "until their next sync rewrites it as a
+tracking annotation", and that a one-time `OutOfSync` churn was therefore
+expected. Running the upgrade falsified both halves, so the prediction is
+recorded here rather than quietly deleted.
+
+There was no churn: `cert-manager` never left `Synced`, and its sync history
+still shows a single entry from the original bootstrap. And nothing was
+rewritten — its sync concluded with *"no more tasks"*, because the manifest
+had not changed, so no apply happened, and without an apply there is nothing
+to migrate a label. ArgoCD 3.x simply **tolerates the legacy label**; the
+migration is **lazy**, not automatic. The cluster is now legitimately mixed,
+and it is visible:
+
+```bash
+# deployed under 2.12.6 -> still label-tracked, no annotation
+kubectl -n cert-manager get deploy cert-manager \
+  -o jsonpath='{.metadata.labels.argocd\.argoproj\.io/instance}'
+# deployed under 3.4.5 -> annotation-tracked, no instance label
+kubectl -n ingress-nginx get deploy ingress-nginx-controller \
+  -o jsonpath='{.metadata.annotations.argocd\.argoproj\.io/tracking-id}'
+```
+
+This is benign — both apps reconcile correctly — but it sharpens the edge case
+named above rather than dissolving it. A resource still carrying only the old
+label has not yet been claimed by the annotation scheme, so the "deleted in the
+first sync after the switch" hazard stays live for those resources until
+something actually re-applies them. On this cluster that is a non-issue
+(ADR-002: it is disposable). On a long-lived one, the honest move would be to
+force a re-apply rather than wait and find out.
