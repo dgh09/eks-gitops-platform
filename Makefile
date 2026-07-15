@@ -49,15 +49,23 @@ tf-validate: ## terraform init + validate
 
 bootstrap: argocd-install argocd-projects argocd-root argocd-status ## One-shot: install ArgoCD + apply root app-of-apps
 
-argocd-install: ## Install ArgoCD via Helm (idempotent)
-	helm repo add argo https://argoproj.github.io/argo-helm >/dev/null 2>&1 || true
+argocd-install: ## Install ArgoCD via Helm (first bootstrap only — it self-manages afterwards)
+	helm repo add argo https://argoproj.github.io/argo-helm --force-update
 	helm repo update argo
-	helm upgrade --install argocd argo/argo-cd \
-	  --namespace $(ARGOCD_NS) --create-namespace \
-	  --version $(ARGOCD_CHART_V) \
-	  --values $(ARGOCD_VALUES) \
-	  --kube-context $(KCTX) \
-	  --wait
+	@if helm status argocd -n $(ARGOCD_NS) --kube-context $(KCTX) >/dev/null 2>&1; then \
+	  echo "==> ArgoCD is already installed and now manages itself from Git."; \
+	  echo "    Helm must not touch it again: ArgoCD owns these fields via"; \
+	  echo "    server-side apply, so 'helm upgrade' would fail on a field"; \
+	  echo "    manager conflict. To change ArgoCD, edit"; \
+	  echo "    $(ARGOCD_VALUES) and merge a PR. Skipping."; \
+	else \
+	  helm install argocd argo/argo-cd \
+	    --namespace $(ARGOCD_NS) --create-namespace \
+	    --version $(ARGOCD_CHART_V) \
+	    --values $(ARGOCD_VALUES) \
+	    --kube-context $(KCTX) \
+	    --wait; \
+	fi
 
 argocd-projects: ## Apply AppProjects (platform, apps)
 	kubectl --context $(KCTX) apply -f $(PROJECTS)/
@@ -71,7 +79,7 @@ argocd-ui: ## Port-forward the ArgoCD UI to http://localhost:8080
 
 argocd-password: ## Print the initial admin password
 	@kubectl --context $(KCTX) -n $(ARGOCD_NS) get secret argocd-initial-admin-secret \
-	  -o jsonpath="{.data.password}" | base64 -d && echo
+	  -o go-template="{{.data.password | base64decode}}" && echo
 
 argocd-status: ## Show ArgoCD pods and Applications
 	kubectl --context $(KCTX) -n $(ARGOCD_NS) get pods

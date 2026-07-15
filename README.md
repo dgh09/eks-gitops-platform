@@ -5,8 +5,10 @@ Opinionated Kubernetes platform: a **local `kind` cluster** or a
 delivery flow** (ArgoCD, app-of-apps) that keeps the cluster in sync with this
 repository.
 
-> 🚧 **Status:** bootstrapping. This README describes the target architecture;
-> incremental PRs are landing the pieces. See the [roadmap](#-roadmap) below.
+> 🚧 **Status:** in progress. The `kind` cluster and the ArgoCD app-of-apps
+> bootstrap are live and verified (see [screenshots](#-what-it-looks-like));
+> platform addons, demo apps and observability are landing in incremental PRs.
+> See the [roadmap](#-roadmap) below.
 
 ---
 
@@ -50,7 +52,13 @@ cluster-agnostic.
 
 ## 🚀 Quick start (local)
 
-Requirements: Docker, [kind](https://kind.sigs.k8s.io/), `kubectl`, `make`.
+Requirements: Docker, [kind](https://kind.sigs.k8s.io/), `kubectl`, `helm`, `make`.
+
+> **On Windows:** run `make` from **Git Bash**, not PowerShell or `cmd`. The
+> targets use POSIX shell syntax, and GNU Make picks its shell by looking for
+> `sh.exe` on `PATH` — which it only finds under Git Bash. From PowerShell it
+> falls back to `cmd.exe` and the recipes fail. Note that `bash` on `PATH` is
+> often the WSL stub (`C:\Windows\system32\bash.exe`), which is *not* Git Bash.
 
 ```bash
 make cluster-up          # spins up a 3-node kind cluster with ingress ports
@@ -71,6 +79,26 @@ Tear it down:
 make cluster-down
 ```
 
+## 📸 What it looks like
+
+After `make bootstrap`, two Applications are reconciling — both `Synced` and
+`Healthy`, both owned by the `platform` AppProject:
+
+![ArgoCD Applications — root and argocd, both Synced and Healthy](./docs/img/argocd-applications.png)
+
+`root` is the **app-of-apps**: a single Application whose job is to create
+other Applications from `platform/argocd/applications/`. Right now it manages
+exactly one child — `argocd` itself:
+
+![The root app-of-apps managing the argocd Application](./docs/img/argocd-root-tree.png)
+
+And that child is the interesting part: **ArgoCD manages itself**. It was
+installed once with Helm to break the chicken-and-egg problem, then adopted
+into Git. From here, changing `platform/argocd/values.yaml` and merging a PR
+is what upgrades ArgoCD — no `helm upgrade` by hand:
+
+![ArgoCD self-managing: its own Deployments, ReplicaSets and Pods reconciled from Git](./docs/img/argocd-self-management.png)
+
 ## ☁️ Production path (AWS EKS)
 
 See [`terraform/README.md`](./terraform/README.md) for the full setup. TL;DR:
@@ -90,14 +118,15 @@ aws eks update-kubeconfig --name gitops-platform --region us-east-1
 ├── kind/               kind cluster config + bootstrap scripts
 ├── terraform/          EKS + VPC (community modules), IAM, addons
 ├── platform/           Platform components delivered via GitOps
-│   ├── argocd/         (next PR) ArgoCD self-management + AppProjects
-│   ├── ingress-nginx/
-│   └── cert-manager/
+│   ├── argocd/         ArgoCD self-management + AppProjects + root app
+│   ├── ingress-nginx/  (PR 3)
+│   └── cert-manager/   (PR 3)
 ├── apps/               Application workloads delivered via GitOps
-│   ├── podinfo/
-│   └── sidebyside/     (later PR)
+│   ├── podinfo/        (PR 4)
+│   └── sidebyside/     (PR 4)
 ├── docs/
-│   └── architecture.md ADRs and diagrams
+│   ├── architecture.md ADRs and diagrams
+│   └── img/            screenshots used in this README
 ├── Makefile            developer entrypoints
 └── .github/workflows/  fmt/validate/lint (Terraform + YAML)
 ```

@@ -17,10 +17,10 @@ flowchart LR
     D -.future.-> I[podinfo.yaml]
 ```
 
-Two commands and the whole chain is bootstrapped:
+One command bootstraps the whole chain:
 
 ```bash
-make bootstrap           # helm install + kubectl apply root-app.yaml
+make bootstrap           # helm install + AppProjects + kubectl apply root-app.yaml
 ```
 
 From that point on, ArgoCD is the only thing that talks to the cluster.
@@ -69,5 +69,20 @@ secret is meant to be rotated.
   still on, so drift is corrected.
 - **`ServerSideApply=true`** everywhere — plays much nicer with CRDs and
   webhook conversions than the legacy client-side merge.
+- **Helm must not touch ArgoCD after bootstrap.** This is the one sharp edge
+  of self-management, and it follows from server-side apply: once the
+  self-app syncs, the `argocd-controller` field manager owns the fields on
+  ArgoCD's own Deployments. A later `helm upgrade` applies with a different
+  field manager and is rejected:
+
+  ```
+  conflict with "argocd-controller":
+  .spec.template.spec.containers[name="applicationset-controller"]
+  .env[name="NAMESPACE"].valueFrom.fieldRef
+  ```
+
+  That rejection is the pattern working, not breaking — Git is the only way
+  in. `make argocd-install` therefore detects an existing release and skips,
+  which keeps `make bootstrap` safely re-runnable.
 - **Root uses `directory.recurse: true`** so adding a new Application is
   a file addition, not a config change.
