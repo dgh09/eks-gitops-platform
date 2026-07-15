@@ -1,0 +1,34 @@
+---
+# cert-manager — portable across kind and EKS.
+#
+# Nothing here is cluster-specific: cert-manager talks to the Kubernetes API,
+# not to the network edge, so unlike ingress-nginx it needs no overlay.
+crds:
+  # Let Helm own the CRDs. The alternative — applying them out of band — means
+  # the chart and the CRDs can drift apart across upgrades.
+  #
+  # NOTE: the old `installCRDs: true` flag is deprecated as of this chart; it
+  # is equivalent to crds.enabled + crds.keep.
+  enabled: true
+
+  # Keep CRDs if the release is ever uninstalled. Deleting them would garbage
+  # collect every Certificate, Issuer and Secret they own — a very expensive
+  # way to find out this was set to false.
+  keep: true
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+webhook:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+
+cainjector:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
