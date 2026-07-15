@@ -32,3 +32,6 @@ kubeconfig
 # OS
 .DS_Store
 Thumbs.db
+
+# Local scratchpad (context for Claude sessions, personal notes)
+CLAUDE.md
