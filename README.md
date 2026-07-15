@@ -81,23 +81,31 @@ make cluster-down
 
 ## 📸 What it looks like
 
-After `make bootstrap`, two Applications are reconciling — both `Synced` and
-`Healthy`, both owned by the `platform` AppProject:
+After `make bootstrap`, five Applications are reconciling — all `Synced` and
+`Healthy`, all owned by the `platform` AppProject:
 
-![ArgoCD Applications — root and argocd, both Synced and Healthy](./docs/img/argocd-applications.png)
+![ArgoCD Applications — all five Synced and Healthy on ArgoCD v3.4.5](./docs/img/argocd-applications.png)
 
 `root` is the **app-of-apps**: a single Application whose job is to create
-other Applications from `platform/argocd/applications/`. Right now it manages
-exactly one child — `argocd` itself:
+other Applications from `platform/argocd/applications/`. It manages four
+children — `argocd`, `cert-manager`, `cert-manager-issuers` and
+`ingress-nginx` — and it is `Synced` to the merge commit itself:
 
-![The root app-of-apps managing the argocd Application](./docs/img/argocd-root-tree.png)
+![The root app-of-apps managing its four children, synced to a merge commit](./docs/img/argocd-root-tree.png)
 
-And that child is the interesting part: **ArgoCD manages itself**. It was
+The first child is the interesting one: **ArgoCD manages itself**. It was
 installed once with Helm to break the chicken-and-egg problem, then adopted
-into Git. From here, changing `platform/argocd/values.yaml` and merging a PR
-is what upgrades ArgoCD — no `helm upgrade` by hand:
+into Git. From there, bumping the chart version in
+`applications/argocd-self.yaml` and merging the PR is what upgrades ArgoCD —
+no `helm upgrade` by hand.
 
-![ArgoCD self-managing: its own Deployments, ReplicaSets and Pods reconciled from Git](./docs/img/argocd-self-management.png)
+That is not a claim, it is what the tree below shows. Every Deployment has
+**two** ReplicaSets: `rev:1` is ArgoCD **v2.12.6**, scaled to zero, and
+`rev:2` is **v3.4.5**, holding the running Pods. ArgoCD replaced its own
+workloads after [ADR-005](./docs/architecture.md#adr-005--upgrade-argocd-to-3x-and-pin-what-the-majors-made-implicit)
+was merged, with nobody touching the cluster:
+
+![ArgoCD self-managing: its own Deployments, ReplicaSets and Pods reconciled from Git, with the old v2.12.6 ReplicaSets left at rev:1](./docs/img/argocd-self-management.png)
 
 ## ☁️ Production path (AWS EKS)
 
