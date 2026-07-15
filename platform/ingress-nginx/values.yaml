@@ -1,0 +1,36 @@
+---
+# ingress-nginx — values that hold on ANY cluster.
+#
+# How traffic physically reaches the controller is the one thing that is NOT
+# portable (kind has no cloud load balancer), so that lives in a per-cluster
+# overlay: values-kind.yaml. See docs/architecture.md ADR-004.
+controller:
+  ingressClassResource:
+    name: nginx
+    # Ingresses that omit ingressClassName still land here. Convenient while
+    # this is the only controller in the cluster; revisit if a second one
+    # ever shows up.
+    default: true
+
+  config:
+    # Trust X-Forwarded-* so backends see the real client IP rather than the
+    # controller's. Safe here because nothing untrusted sits in front of the
+    # controller; on EKS the ELB is the only hop.
+    use-forwarded-headers: "true"
+    # Log in JSON so PR 5 (Loki) can parse it without a regex pipeline.
+    log-format-escape-json: "true"
+    log-format-upstream: >-
+      {"time":"$time_iso8601","remote_addr":"$remote_addr",
+      "request":"$request","status":$status,
+      "upstream_status":"$upstream_status",
+      "request_time":$request_time,"host":"$host"}
+
+  # A metrics Service + ServiceMonitor-ready endpoint. Prometheus arrives in
+  # PR 5; exposing the endpoint now costs nothing.
+  metrics:
+    enabled: true
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi

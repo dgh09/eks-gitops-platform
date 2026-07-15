@@ -1,0 +1,12 @@
+---
+# Bootstrap issuer. Its only job is to sign ONE thing: the platform CA below.
+# Workloads never reference this issuer directly — a self-signed leaf per app
+# means a new browser warning per app, which nobody clicks through twice.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-bootstrap
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  selfSigned: {}

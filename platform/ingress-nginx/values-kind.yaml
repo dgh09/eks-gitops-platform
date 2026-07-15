@@ -1,0 +1,42 @@
+---
+# ingress-nginx — kind overlay.
+#
+# kind has no cloud load balancer, so a Service of type LoadBalancer would sit
+# in <pending> forever. Instead the controller binds the node's host ports
+# directly, and kind/cluster.yaml maps host 80/443 into the control-plane node
+# and labels it ingress-ready=true. That pairing is what makes
+# http://localhost work from Windows.
+#
+# On EKS this file is replaced by an overlay that asks for a real NLB — the
+# chart and the common values.yaml stay identical. See ADR-004.
+controller:
+  hostPort:
+    enabled: true
+
+  # Pin the controller to the one node whose ports 80/443 kind published.
+  # Without this it could schedule on a worker, whose host ports go nowhere.
+  nodeSelector:
+    ingress-ready: "true"
+
+  # That node is the control-plane, which carries a NoSchedule taint.
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+
+  # With hostPort doing the real work, the Service is only for in-cluster
+  # traffic and metrics — NodePort keeps it from requesting a LoadBalancer.
+  service:
+    type: NodePort
+
+  # publishService populates an Ingress's status.loadBalancer from the
+  # controller's Service. With no LoadBalancer there is nothing to publish, so
+  # it is disabled and the node IP is reported instead — otherwise every
+  # Ingress shows a permanently empty ADDRESS.
+  publishService:
+    enabled: false
+  extraArgs:
+    report-node-internal-ip-address: "true"
+
+  # One node can only bind :80 once.
+  replicaCount: 1

@@ -1,0 +1,46 @@
+---
+# A CA certificate, signed by the bootstrap issuer above.
+#
+# It must live in cert-manager's own namespace: that is where a ClusterIssuer
+# looks for its signing key (the --cluster-resource-namespace flag, which
+# defaults to the release namespace). Put this Secret anywhere else and the
+# issuer below reports "secret not found" with no other clue.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: platform-ca
+  namespace: cert-manager
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  isCA: true
+  commonName: gitops-platform-ca
+  secretName: platform-ca-tls
+  duration: 8760h     # 1 year
+  renewBefore: 720h   # 30 days
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: selfsigned-bootstrap
+    kind: ClusterIssuer
+    group: cert-manager.io
+
+---
+# The issuer workloads actually use. Trust `platform-ca-tls` once in your OS or
+# browser and every certificate it signs is trusted — that is the whole point
+# of the two-step dance above.
+#
+# When this platform gets a real DNS name, this becomes a second ClusterIssuer
+# of kind ACME (Let's Encrypt) and workloads switch issuerRef. Nothing else in
+# platform/ or apps/ has to change.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: platform-ca
+  annotations:
+    # Wave 2: the CA Secret must exist before this issuer can go Ready.
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  ca:
+    secretName: platform-ca-tls

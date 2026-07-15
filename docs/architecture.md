@@ -62,7 +62,7 @@ flowchart TB
 
 The **app-of-apps** pattern gives us a single root ArgoCD `Application` that
 declares child `Application`s for every workload. Adding a new app means one
-file in `platform/argocd/apps/` — ArgoCD picks it up automatically.
+file in `platform/argocd/applications/` — ArgoCD picks it up automatically.
 
 ## Cluster options
 
@@ -77,7 +77,11 @@ Two clusters, same delivery layer:
 | DNS | `/etc/hosts` or nip.io | Route53 + external-dns |
 | Node auth | Static | IAM + IRSA/Pod Identity |
 
-Manifests in `platform/` and `apps/` are written to work on both.
+Manifests in `platform/` and `apps/` are written to work on both. The one
+place that genuinely cannot be shared is the network edge (the `LoadBalancer`
+row above): ingress-nginx needs different values per cluster, so it carries a
+small per-cluster overlay next to its portable values. See
+[ADR-004](#adr-004--per-cluster-values-overlays-not-one-portable-values-file).
 
 ## Architecture Decision Records
 
@@ -126,3 +130,44 @@ tenant, per PR preview) which we don't yet.
 **Consequences:** Adding an app is a file addition, not a generator config
 change. Revisit if we start managing >20 apps or need PR preview
 environments.
+
+### ADR-004 — Per-cluster values overlays, not one portable values file
+
+**Context:** The delivery layer is meant to be cluster-agnostic, and for most
+components it genuinely is — cert-manager talks to the Kubernetes API and
+neither knows nor cares what runs underneath. ingress-nginx is the exception:
+it sits at the network edge, and the edge is exactly what differs. On EKS it
+asks for an NLB and gets one. On `kind` there is no cloud controller, so a
+`type: LoadBalancer` Service stays `<pending>` forever; the controller must
+instead bind the node's host ports, which only works if it is pinned to the
+node whose ports `kind` published.
+
+Those are not the same config, and no amount of wishing makes them one.
+
+**Decision:** Split Helm values into a portable `values.yaml` plus a
+per-cluster overlay (`values-kind.yaml`, later `values-eks.yaml`). The
+Application layers them in order, last file wins:
+
+```yaml
+valueFiles:
+  - $values/platform/ingress-nginx/values.yaml
+  - $values/platform/ingress-nginx/values-kind.yaml
+```
+
+**Rationale:** The alternative — one values file with the union of both
+clusters' settings — either breaks on one of them or hides the difference
+behind conditionals. Naming the seam is more honest, and it keeps the
+interesting question ("what actually differs between local and cloud?")
+answerable by diffing two short files. Retargeting a component to EKS becomes
+a one-line change in its Application.
+
+**Consequences:** Two files per edge-facing component instead of one, and the
+overlay is chosen by editing the Application rather than by a flag — a
+deliberate constraint, since ArgoCD resolves it at sync time from Git and
+there is no `--set cluster=kind` to reach for. Components that do not touch
+the edge (cert-manager today) keep a single `values.yaml` and no overlay;
+adding one "for symmetry" would be cargo cult.
+
+`values-eks.yaml` is **not** in this repo yet: writing it would mean shipping
+config no one has ever run, and the EKS path is still `terraform validate`
+only. It lands with the first real EKS apply.

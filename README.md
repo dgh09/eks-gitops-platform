@@ -135,7 +135,7 @@ aws eks update-kubeconfig --name gitops-platform --region us-east-1
 
 - [x] **PR 1** — Repo scaffolding, kind cluster, Terraform EKS (validate-only), docs
 - [x] **PR 2** — ArgoCD bootstrap + app-of-apps pattern
-- [ ] **PR 3** — Platform components via GitOps (ingress-nginx, cert-manager)
+- [x] **PR 3** — Platform components via GitOps (ingress-nginx, cert-manager)
 - [ ] **PR 4** — Demo apps (podinfo + sidebyside)
 - [ ] **PR 5** — Observability stack (Prometheus + Grafana + Loki)
 - [ ] **PR 6** — Cost analysis + disaster recovery runbook

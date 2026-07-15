@@ -1,0 +1,37 @@
+---
+# ClusterIssuers, split out from the cert-manager chart on purpose.
+#
+# They are a separate Application because they depend on CRDs the chart
+# installs. Same Application would mean ArgoCD dry-runs a ClusterIssuer whose
+# CRD does not exist yet and fails the whole sync on a fresh cluster. Wave 2
+# here runs only once the cert-manager Application (wave 1) reports Healthy.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager-issuers
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+
+  source:
+    repoURL: https://github.com/dgh09/eks-gitops-platform.git
+    targetRevision: main
+    path: platform/cert-manager/issuers
+    directory:
+      recurse: true
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+      - ServerSideApply=true
