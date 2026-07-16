@@ -1,0 +1,52 @@
+---
+# podinfo — the first workload app.
+#
+# Note the project: `apps`, not `platform`. That project is deliberately
+# narrower (platform/argocd/projects/apps.yaml): workloads may only land in
+# their own namespace and may not create cluster-scoped resources. If this
+# Application ever tries to, ArgoCD refuses the sync rather than letting an
+# app quietly grow cluster-wide reach.
+#
+# Wave 3: after cert-manager and ingress-nginx (wave 1) and the ClusterIssuers
+# (wave 2), because the Ingress below asks platform-ca for a certificate and
+# that issuer has to exist first.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: podinfo
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: apps
+
+  sources:
+    - repoURL: https://stefanprodan.github.io/podinfo
+      chart: podinfo
+      targetRevision: 6.14.0
+      helm:
+        releaseName: podinfo
+        # Order matters: later files win on conflicting keys.
+        valueFiles:
+          - $values/apps/podinfo/values.yaml
+          - $values/apps/podinfo/values-kind.yaml
+    - repoURL: https://github.com/dgh09/eks-gitops-platform.git
+      targetRevision: main
+      ref: values
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: podinfo
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      # No CreateNamespace here, unlike the platform components. This app
+      # cannot create its own namespace — the `apps` project forbids
+      # cluster-scoped resources — so the platform provisions it instead,
+      # via the `namespaces` Application in wave 2. See ADR-006.
+      - ServerSideApply=true

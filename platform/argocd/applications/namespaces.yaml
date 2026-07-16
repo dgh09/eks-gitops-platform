@@ -1,0 +1,46 @@
+---
+# Namespaces for workload apps.
+#
+# Deliberately a platform concern, not an app one: the `apps` project forbids
+# cluster-scoped resources, so an app cannot open its own namespace even by
+# accident. The platform hands it one. See ADR-006.
+#
+# Wave 2: before podinfo (wave 3), so the namespace exists by the time
+# anything wants to be scheduled into it.
+#
+# Adding a tenant means dropping a Namespace manifest into platform/namespaces/
+# — this Application recurses and picks it up.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: namespaces
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+
+  source:
+    repoURL: https://github.com/dgh09/eks-gitops-platform.git
+    targetRevision: main
+    path: platform/namespaces
+    directory:
+      recurse: true
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+
+  syncPolicy:
+    automated:
+      # Pruning here would delete a tenant's namespace — and everything in it —
+      # the moment its manifest left Git. That is a lot of blast radius for a
+      # file deletion, so removing a tenant stays a deliberate two-step:
+      # delete the manifest, then delete the namespace by hand.
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+      - ServerSideApply=true

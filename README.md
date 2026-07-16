@@ -73,6 +73,18 @@ future changes to `platform/argocd/values.yaml` (or any other component)
 land via PR, not `helm upgrade`. See
 [`platform/argocd/README.md`](./platform/argocd/README.md) for details.
 
+The same bootstrap also delivers a workload, so there is something to look at
+besides ArgoCD itself:
+
+**<https://podinfo.127.0.0.1.nip.io>**
+
+No `/etc/hosts` entry and no admin rights: `nip.io` resolves that name straight
+back to `127.0.0.1`, and `kind` publishes the cluster's `:443` onto the host.
+Your browser will warn about the certificate — it is real and correctly issued,
+just signed by the cluster's own CA (`gitops-platform-ca`, from PR 3) rather
+than one your browser trusts. Click through. Refresh a few times and the pod
+name changes: two replicas, deliberately scheduled onto different nodes.
+
 Tear it down:
 
 ```bash
@@ -127,11 +139,12 @@ aws eks update-kubeconfig --name gitops-platform --region us-east-1
 ├── terraform/          EKS + VPC (community modules), IAM, addons
 ├── platform/           Platform components delivered via GitOps
 │   ├── argocd/         ArgoCD self-management + AppProjects + root app
-│   ├── ingress-nginx/  (PR 3)
-│   └── cert-manager/   (PR 3)
+│   ├── ingress-nginx/
+│   ├── cert-manager/
+│   └── namespaces/     Tenant namespaces — platform-owned, see ADR-006
 ├── apps/               Application workloads delivered via GitOps
-│   ├── podinfo/        (PR 4)
-│   └── sidebyside/     (PR 4)
+│   ├── podinfo/
+│   └── sidebyside/     (next)
 ├── docs/
 │   ├── architecture.md ADRs and diagrams
 │   └── img/            screenshots used in this README
@@ -141,12 +154,19 @@ aws eks update-kubeconfig --name gitops-platform --region us-east-1
 
 ## 🗺️ Roadmap
 
+Shipped work carries its PR number; upcoming work does not, because the last
+set of guessed numbers drifted two places and the roadmap quietly lied about
+which PR did what.
+
 - [x] **PR 1** — Repo scaffolding, kind cluster, Terraform EKS (validate-only), docs
 - [x] **PR 2** — ArgoCD bootstrap + app-of-apps pattern
 - [x] **PR 3** — Platform components via GitOps (ingress-nginx, cert-manager)
-- [ ] **PR 4** — Demo apps (podinfo + sidebyside)
-- [ ] **PR 5** — Observability stack (Prometheus + Grafana + Loki)
-- [ ] **PR 6** — Cost analysis + disaster recovery runbook
+- [x] **PR 4** — ArgoCD 2.12 → 3.4, applied by ArgoCD to itself ([ADR-005](./docs/architecture.md))
+- [x] **PR 5** — ADR-005 correction + screenshots refreshed against the upgraded cluster
+- [x] **PR 6** — First workload app: podinfo, with platform-owned namespaces ([ADR-006](./docs/architecture.md))
+- [ ] Side by Side (Next.js) — the app this platform exists to carry; needs a Dockerfile first
+- [ ] Observability stack (Prometheus + Grafana + Loki)
+- [ ] Cost analysis + disaster recovery runbook
 
 ## 📄 License
 

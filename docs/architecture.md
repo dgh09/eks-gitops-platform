@@ -273,3 +273,65 @@ first sync after the switch" hazard stays live for those resources until
 something actually re-applies them. On this cluster that is a non-issue
 (ADR-002: it is disposable). On a long-lived one, the honest move would be to
 force a re-apply rather than wait and find out.
+
+### ADR-006 — Namespaces are provisioned by the platform, not by the app
+
+**Context:** The `apps` AppProject was written narrow on purpose: workloads may
+only land in their own namespace, and `clusterResourceWhitelist: []` means they
+may not create cluster-scoped resources at all. The first workload to actually
+use that project — podinfo — failed to sync on its very first attempt:
+
+```
+Namespace  podinfo  SyncFailed  resource :Namespace is not permitted in project apps
+```
+
+The cause is not subtle once seen. `CreateNamespace=true` is a sync option that
+makes the Application create its own destination namespace, and a Namespace is
+a cluster-scoped resource. The app was asking for exactly the permission the
+project exists to deny. Every platform component (cert-manager, ingress-nginx,
+ArgoCD itself) carries `CreateNamespace=true` and works fine, because they run
+under the `platform` project, which whitelists `*/*`. Copying that line into an
+`apps` Application looked like boilerplate and was actually a boundary
+violation.
+
+**Decision:** Keep the boundary and move the responsibility. Namespaces for
+workloads are declared in `platform/namespaces/` and delivered by a
+`namespaces` Application running under the **platform** project at sync-wave 2.
+Workload Applications drop `CreateNamespace=true` and are scheduled into a
+namespace that already exists.
+
+**Rationale:** The obvious alternative was to add `Namespace` to the `apps`
+project's `clusterResourceWhitelist` — three lines, and podinfo syncs. It was
+rejected because it answers a design question with a permission. The whitelist
+is not a hurdle the app tripped over; it is the statement that an application
+does not get to decide where it lives. Granting the exception would have made
+the comment already sitting in `apps.yaml` — *"Apps must not create
+cluster-scoped resources"* — false, and would have let any future app open any
+namespace it liked, which is precisely the reach the project was drawn to
+prevent.
+
+The split also matches how this works when there is more than one team: the
+platform provisions tenancy, tenants fill it. A namespace is where quota,
+network policy, and admission rules will eventually hang — all platform
+concerns, none of them the app's to grant itself. Making the app ask for its
+own namespace inverts that, and the inversion is easy to miss precisely because
+`CreateNamespace=true` reads like harmless boilerplate.
+
+That the failure surfaced on the first workload, rather than on the tenth, is
+the project doing its job.
+
+**Consequences:** Onboarding a workload is now two files in two places: a
+Namespace manifest in `platform/namespaces/`, and an Application in
+`platform/argocd/applications/`. That is more ceremony than
+`CreateNamespace=true`, and it is the point — crossing the platform/app line
+should require touching the platform.
+
+The `namespaces` Application runs with `prune: false`, unlike every other
+platform component here. Pruning would mean that deleting a manifest deletes a
+live namespace and everything inside it; that is too much blast radius to hang
+on a file deletion, so decommissioning a tenant is deliberately a two-step:
+remove the manifest, then delete the namespace by hand.
+
+Platform components keep their own `CreateNamespace=true`. They are not covered
+by this ADR and do not need to be — they *are* the platform, and the `platform`
+project already grants them the reach.
