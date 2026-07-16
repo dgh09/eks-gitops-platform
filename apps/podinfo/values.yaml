@@ -1,0 +1,48 @@
+---
+# podinfo — values that hold on ANY cluster.
+#
+# This is the first workload the platform delivers that is not the platform
+# itself: proof that the delivery layer built in PRs 1–5 carries ordinary
+# applications, not just its own components.
+#
+# How traffic physically reaches it — the hostname, and who signs its
+# certificate — is the one thing that is NOT portable, so it lives in a
+# per-cluster overlay: values-kind.yaml. Same seam as ingress-nginx, same
+# reasoning: see docs/architecture.md ADR-004.
+
+replicaCount: 2
+
+ui:
+  message: "Delivered by ArgoCD from Git. Nobody ran kubectl apply."
+
+# Two replicas are only worth having if they can land on different nodes.
+# `ScheduleAnyway` keeps this a preference rather than a rule: on a
+# single-node cluster a hard constraint would leave the second pod Pending
+# forever, which is a worse failure than two pods sharing a node.
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: podinfo
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    # Memory only, deliberately. A CPU limit would throttle the container
+    # under load while leaving idle capacity on the node; memory is the one
+    # resource that cannot be reclaimed by slowing down, so it gets a ceiling.
+    memory: 64Mi
+
+ingress:
+  enabled: true
+  className: nginx
+
+# The chart can emit a ServiceMonitor, but the CRD ships with Prometheus,
+# which is not installed yet — enabling this now would fail the sync on a
+# missing kind. It turns on with the observability stack.
+serviceMonitor:
+  enabled: false

@@ -1,0 +1,15 @@
+---
+# The namespace podinfo lives in — provisioned by the platform, not by the app.
+#
+# podinfo's own Application runs under the `apps` project, which cannot create
+# cluster-scoped resources, and a Namespace is cluster-scoped. That is not an
+# obstacle to work around; it is the boundary doing its job. See ADR-006.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: podinfo
+  labels:
+    # Who lives here, and who put them here. Useful when a second pair of eyes
+    # is trying to work out why this namespace exists.
+    app.kubernetes.io/managed-by: argocd
+    gitops-platform.io/tenant: podinfo

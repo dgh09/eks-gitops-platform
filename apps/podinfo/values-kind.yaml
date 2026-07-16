@@ -1,0 +1,37 @@
+---
+# podinfo — kind overlay.
+#
+# Everything here answers one question: how does a browser on the Windows host
+# reach this pod, and whose certificate does it get? Both answers are
+# cluster-specific, which is exactly the seam ADR-004 names.
+ingress:
+  annotations:
+    # platform-ca is the in-cluster CA from PR #3. It signs a real certificate
+    # for a real hostname — the chain is genuine, it just terminates at a CA
+    # your browser has never heard of, so expect a warning and click through.
+    # On EKS this line becomes a public issuer (Let's Encrypt / ACM) and
+    # nothing else in this file or in values.yaml has to move.
+    cert-manager.io/cluster-issuer: platform-ca
+
+  # nip.io is a public DNS service that resolves any name of the form
+  # <anything>.<ip>.nip.io straight back to that IP — so this host resolves to
+  # 127.0.0.1 with no /etc/hosts entry and no admin rights. kind publishes the
+  # control-plane's 80/443 onto the Windows host (kind/cluster.yaml), so
+  # 127.0.0.1:443 is ingress-nginx, and the Host header does the rest.
+  #
+  # The tradeoff is a dependency on someone else's DNS for a local demo. It is
+  # accepted because the alternative — telling every reader to edit
+  # C:\Windows\System32\drivers\etc\hosts as administrator before the URL in
+  # the README works — is worse friction for a worse reason. If nip.io is ever
+  # down, `curl --resolve podinfo.127.0.0.1.nip.io:443:127.0.0.1` still works,
+  # and a hosts entry is the fallback.
+  hosts:
+    - host: podinfo.127.0.0.1.nip.io
+      paths:
+        - path: /
+          pathType: Prefix
+
+  tls:
+    - secretName: podinfo-tls
+      hosts:
+        - podinfo.127.0.0.1.nip.io
